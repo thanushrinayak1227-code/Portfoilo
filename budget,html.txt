@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Monthly Budget Planner</title>
+    <style>
+        body {
+            font-family: Arial;
+            background: linear-gradient(to right, #e3f2fd, #fce4ec);
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+
+        .container {
+            background: white;
+            padding: 30px;
+            width: 400px;
+            border-radius: 12px;
+            box-shadow: 0px 5px 15px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+
+        h2 {
+            margin-bottom: 20px;
+        }
+
+        input, button {
+            width: 90%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+        }
+
+        button {
+            background-color: #4CAF50;
+            color: white;
+            border: none;
+            cursor: pointer;
+        }
+
+        button:hover {
+            background-color: #45a049;
+        }
+
+        .result {
+            margin-top: 20px;
+            text-align: left;
+        }
+
+        .need { color: blue; }
+        .wants { color: orange; }
+        .savings { color: green; }
+
+        .feedback-section {
+            margin-top: 30px;
+            padding-top: 20px;
+            border-top: 2px solid #ddd;
+        }
+
+        .feedback-input {
+            width: 90%;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border: 1px solid #ccc;
+            font-family: Arial;
+            resize: vertical;
+            min-height: 80px;
+        }
+
+        .feedback-list {
+            margin-top: 15px;
+            text-align: left;
+            max-height: 300px;
+            overflow-y: auto;
+        }
+
+        .feedback-item {
+            background-color: #f9f9f9;
+            padding: 10px;
+            margin: 8px 0;
+            border-radius: 6px;
+            border-left: 4px solid #4CAF50;
+            font-size: 14px;
+        }
+
+        .feedback-item-text {
+            color: #333;
+            margin: 0;
+        }
+
+        .feedback-item-time {
+            color: #999;
+            font-size: 12px;
+            margin-top: 5px;
+        }
+
+        .no-feedback {
+            color: #999;
+            font-style: italic;
+            text-align: center;
+            padding: 15px 0;
+        }
+
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2>Monthly Budget Planner</h2>
+
+    <input type="number" id="allowance" placeholder="Enter Monthly Allowance">
+    <button onclick="calculateBudget()">Calculate Budget</button>
+
+    <div class="result" id="result"></div>
+
+    <!-- Feedback Section -->
+    <div class="feedback-section">
+        <h3 style="margin-top: 0; color: #333;">Feedback</h3>
+        <input type="email" id="feedbackEmail" placeholder="Your email (optional)" style="width: 90%; padding: 10px; margin: 8px 0; border-radius: 6px; border: 1px solid #ccc;">
+        <textarea class="feedback-input" id="feedbackInput" placeholder="Share your feedback or comments..."></textarea>
+        <button onclick="addFeedback()" style="background-color: #2196F3;">Add Feedback</button>
+        
+        <div class="feedback-list" id="feedbackList">
+            <div class="no-feedback">Loading feedback...</div>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_URL = 'http://localhost:5000/api';
+let feedbackList = [];
+
+function calculateBudget() {
+    const allowance = parseFloat(document.getElementById("allowance").value);
+    const resultDiv = document.getElementById("result");
+
+    if (isNaN(allowance) || allowance <= 0) {
+        alert("Please enter a valid allowance");
+        return;
+    }
+
+    // 50-30-20 Rule
+    const needs = allowance * 0.50;
+    const wants = allowance * 0.30;
+    const savings = allowance * 0.20;
+
+    resultDiv.innerHTML = `
+        <p class="need">Needs (50%): Rs ${needs.toFixed(2)}</p>
+        <p class="wants">Wants (30%): Rs ${wants.toFixed(2)}</p>
+        <p class="savings">Savings (20%): Rs ${savings.toFixed(2)}</p>
+    `;
+}
+
+async function addFeedback() {
+    const feedbackInput = document.getElementById("feedbackInput");
+    const feedbackEmail = document.getElementById("feedbackEmail");
+    const feedbackText = feedbackInput.value.trim();
+
+    if (feedbackText === "") {
+        alert("Please enter some feedback");
+        return;
+    }
+
+    const addButton = event.target;
+    addButton.disabled = true;
+    addButton.textContent = "Sending...";
+
+    try {
+        const response = await fetch(`${API_URL}/feedback`, {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json'
+            },
+            body: JSON.stringify({
+                text: feedbackText,
+                email: feedbackEmail.value.trim()
+            })
+        });
+
+        const data = await response.json();
+
+        if (response.ok) {
+            feedbackInput.value = "";
+            feedbackEmail.value = "";
+            
+            // Show success message
+            alert('Feedback sent successfully!' + (data.githubIssueUrl ? '\n\nGitHub Issue: ' + data.githubIssueUrl : ''));
+            
+            // Reload feedback
+            loadFeedback();
+        } else {
+            alert('Error: ' + (data.error || 'Failed to send feedback'));
+        }
+    } catch (error) {
+        console.error('Error:', error);
+        alert('Error sending feedback. Make sure the server is running on http://localhost:5000');
+    } finally {
+        addButton.disabled = false;
+        addButton.textContent = "Add Feedback";
+    }
+}
+
+async function loadFeedback() {
+    try {
+        const response = await fetch(`${API_URL}/feedback`);
+        
+        if (!response.ok) {
+            throw new Error('Failed to fetch feedback');
+        }
+        
+        feedbackList = await response.json();
+        displayFeedback();
+    } catch (error) {
+        console.error('Error loading feedback:', error);
+        const feedbackListDiv = document.getElementById("feedbackList");
+        feedbackListDiv.innerHTML = '<div class="no-feedback">Unable to connect to server. Make sure the backend is running.</div>';
+    }
+}
+
+function displayFeedback() {
+    const feedbackListDiv = document.getElementById("feedbackList");
+
+    if (feedbackList.length === 0) {
+        feedbackListDiv.innerHTML = '<div class="no-feedback">No feedback yet. Be the first to share!</div>';
+        return;
+    }
+
+    let feedbackHTML = '';
+    feedbackList.forEach((feedback) => {
+        const date = new Date(feedback.timestamp).toLocaleString();
+        feedbackHTML += `
+            <div class="feedback-item">
+                <p class="feedback-item-text">${escapeHtml(feedback.text)}</p>
+                ${feedback.email ? '<p style="color: #666; font-size: 12px; margin: 5px 0;">Email: ' + escapeHtml(feedback.email) + '</p>' : ''}
+                ${feedback.githubIssueUrl ? '<a href="' + feedback.githubIssueUrl + '" target="_blank" style="color: #2196F3; font-size: 12px; text-decoration: none;">View on GitHub</a>' : ''}
+                <div class="feedback-item-time">${date}</div>
+            </div>
+        `;
+    });
+
+    feedbackListDiv.innerHTML = feedbackHTML;
+}
+
+function escapeHtml(text) {
+    const map = {
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#039;'
+    };
+    return text.replace(/[&<>"']/g, m => map[m]);
+}
+
+// Load feedback on page load
+window.onload = function() {
+    loadFeedback();
+    // Refresh feedback every 30 seconds
+    setInterval(loadFeedback, 30000);
+};
+</script>
+
+</body>
+</html>
